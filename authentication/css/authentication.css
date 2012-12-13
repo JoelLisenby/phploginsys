@@ -1,0 +1,108 @@
+.login_or_create {
+	color: #434343;
+	font-weight: bold;
+}
+	.login_or_create a {
+		color: #005aae;
+		text-decoration: none;
+	}
+		.login_or_create a:hover {
+			text-decoration: underline;
+		}
+	.auth_button {
+		display: inline-block;
+		padding: 0.5em 1em;
+		color: #ffffff !important;
+		font-weight: bold;
+		border-radius: 5px;
+		text-shadow: 1px 1px #bd7610;
+		text-decoration: none;
+		background: #bd7610; /* Old browsers */
+		background: -moz-linear-gradient(top,  #ffb243 0%, #ff9600 100%); /* FF3.6+ */
+		background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#ffb243), color-stop(100%,#ff9600)); /* Chrome,Safari4+ */
+		background: -webkit-linear-gradient(top,  #ffb243 0%,#ff9600 100%); /* Chrome10+,Safari5.1+ */
+		background: -o-linear-gradient(top,  #ffb243 0%,#ff9600 100%); /* Opera 11.10+ */
+		background: -ms-linear-gradient(top,  #ffb243 0%,#ff9600 100%); /* IE10+ */
+		background: linear-gradient(top,  #ffb243 0%,#ff9600 100%); /* W3C */
+		filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#ffb243', endColorstr='#ff9600',GradientType=0 ); /* IE6-9 */
+	}
+		.auth_button:hover {
+			text-decoration: none !important;
+			background: #ffa82b; /* Old browsers */
+			background: -moz-linear-gradient(top,  #ffc572 0%, #ff9600 100%); /* FF3.6+ */
+			background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#ffc572), color-stop(100%,#ff9600)); /* Chrome,Safari4+ */
+			background: -webkit-linear-gradient(top,  #ffc572 0%,#ff9600 100%); /* Chrome10+,Safari5.1+ */
+			background: -o-linear-gradient(top,  #ffc572 0%,#ff9600 100%); /* Opera 11.10+ */
+			background: -ms-linear-gradient(top,  #ffc572 0%,#ff9600 100%); /* IE10+ */
+			background: linear-gradient(top,  #ffc572 0%,#ff9600 100%); /* W3C */
+			filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#ffc572', endColorstr='#ff9600',GradientType=0 ); /* IE6-9 */
+		}
+
+#authform {
+	display: block;
+	position: relative;
+	margin: 0 auto;
+	padding: 0;
+	text-align: center;
+}
+	#authform form {
+		display: block;
+		position: relative;
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0;
+	}
+	#authform h1 {
+		display: none;
+	}
+	
+	#authform_message {
+		margin: 0 0 1em 0;
+		padding: 0.25em;
+		border: 1px solid #000000;
+		border-radius: 0.4em;
+		background-color: #ffde9d;
+		color: #bd3100;
+		font-size: 1em;
+		font-weight: bold;
+	}
+	
+	#authform_user,#authform_pass,#authform_submit {
+		display: inline-block;
+		position: relative;
+		text-align: left;
+		vertical-align: bottom;
+	}
+
+	#authform_user, #authform_pass {
+		width: 45%;
+		margin-right: 2%;
+		text-align: center;
+	}
+	#authform_pass {
+		width: 31%;
+	}
+		#authform_user label, #authform_pass label {
+			font-size: 1em;
+			color: #989898;
+		}
+		#authform_user input, #authform_pass input {
+			display: block;
+			width: 100%;
+			padding: 0;
+			margin: 0;
+			border: 1px solid #d5e6e9;
+			font-size: 1.1em;
+			text-align: center;
+		}
+	#authform_submit {
+		text-align: center;
+	}
+		#authform_submit input {
+			display: inline-block;
+			border: 0;
+			font-family: inherit;
+			font-size: 1em;
+			cursor: pointer;
+		}

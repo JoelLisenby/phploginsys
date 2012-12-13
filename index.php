@@ -1,13 +1,3 @@
-phploginsys
-===========
-
-A simple PHP user account login and registration system.
-
-Utilizes the public domain phpass password hashing framework for secure password hashing.
-phpass - http://www.openwall.com/phpass/
-
-See index.php for usage example:
-
 <?php
 require_once "authentication/auth.php";
 $auth = new Authentication();
