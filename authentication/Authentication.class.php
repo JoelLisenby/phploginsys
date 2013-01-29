@@ -89,7 +89,7 @@ class Authentication {
 	}
 	
 	public function isLevel($level = null) {
-		if(!empty($level)) {
+		if($this->authenticated && !empty($level)) {
 			if(self::getAccessLevel($_SESSION['username']) === $level) {
 				return true;
 			} else {
