@@ -96,7 +96,7 @@ class Authentication {
 		$now = new DateTime();
 		$last_login = new DateTime($user["last_login"]);
 		
-		if($now - $last_login <= MAX_SESSION_LENGTH) {
+		if($last_login->diff($now)->format("s") <= MAX_SESSION_LENGTH) {
 			return true;
 		} else {
 			return false;
