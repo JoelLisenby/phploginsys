@@ -95,6 +95,8 @@ class Authentication {
 		$user = $result->fetch_assoc();
 		$now = new DateTime();
 		$last_login = new DateTime($user["last_login"]);
+		$result->free();
+		$db->close();
 		
 		if($last_login->diff($now)->format("s") <= MAX_SESSION_LENGTH) {
 			return true;
