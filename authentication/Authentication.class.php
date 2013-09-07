@@ -50,7 +50,7 @@ class Authentication {
 			if(!self::spam()) {
 				self::$action = (isset($_GET[ACTION_VAR]) ? $_GET[ACTION_VAR] : array());
 				
-				if(!isset($_SESSION['signed_in'])) { // User not logged in
+				if(!self::isLoggedIn()) { // User not logged in
 					switch(self::$action) {
 						case "register": // register a new account
 							self::register();
@@ -85,6 +85,21 @@ class Authentication {
 			}
 		} else {
 			$_SESSION['message'] = self::$language["sessions_req"];
+		}
+	}
+	
+	private function isLoggedIn() {
+		$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
+		$query = "SELECT last_login FROM users WHERE id = ".self::getUid($_SESSION["username"]);
+		$result = $db->query($query);
+		$user = $result->fetch_assoc();
+		$now = new DateTime();
+		$last_login = new DateTime($user["last_login"]);
+		
+		if($now - $last_login <= MAX_SESSION_LENGTH) {
+			return true;
+		} else {
+			return false;
 		}
 	}
 	
