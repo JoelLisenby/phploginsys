@@ -51,6 +51,8 @@ class Authentication {
 				self::$action = (isset($_GET[ACTION_VAR]) ? $_GET[ACTION_VAR] : array());
 				
 				if(!self::isLoggedIn()) { // User not logged in
+					$this->authenticated = false;
+					
 					switch(self::$action) {
 						case "register": // register a new account
 							self::register();
