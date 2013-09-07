@@ -19,6 +19,7 @@ along with phploginsys.  If not, see <http://www.gnu.org/licenses/>.
 define('SITE_LANG','EN');
 define('SITE_NAME','Auth');
 define('SITE_EMAIL','noreply@your-domain.com'); // Used as the "from" email for mail sent.
+define('MAX_SESSION_LENGTH',7200); // max login time in seconds. (user is logged out on browser/tab close)
 define('DB_HOST','localhost');
 define('DB_USER','');
 define('DB_PASS','');
