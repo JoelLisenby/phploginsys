@@ -25,7 +25,7 @@ $words = array(
 // Universal
 "status_spam" => "Too many attempts. Try again in ".self::$minutes_left." minute".(self::$minutes_left == 1 ? "" : "s").".",
 "username_req" => "Username must be a valid email address",
-"password_req" => "Password must be at least 8 characters long and contain a lower case, upper case, number, and special character (@#$%!).",
+"password_req" => "Password must be at least 8 characters long and contain a lower case letter, upper case letter, number, and a special character (@#$%!).",
 "sessions_req" => "Error! Authentication requires sessions.",
 
 // login()
