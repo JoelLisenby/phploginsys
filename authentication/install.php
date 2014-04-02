@@ -54,8 +54,10 @@ class InstallAuthentication {
 			password varchar(60),
 			auth_level int(10),
 			token varchar(60),
-			active boolean,
-			last_login datetime";
+			active tinyint(1),
+			disabled tinyint(1),
+			date_created datetime,
+			date_last_login datetime";
 		if(!empty(self::$custom_cols)) {
 			$i = 0;
 			$sql_create_table .= ",\n";
