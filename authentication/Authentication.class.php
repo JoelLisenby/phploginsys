@@ -33,24 +33,49 @@ if($auth->authenticated) {
 class Authentication {
 	public $authenticated = false;		// logged in?
 	
-	private static $db;
 	private static $language;
 	private static $action;
 	private static $message;
 	private static $errors;
 	private static $attempts = 0;		// Maximum attempts
 	private static $minutes_left;
+	private static $last_activity; // amount of time in seconds elapsed since last authentication check.
 
 	public function __construct() {
 		require_once "translations/". SITE_LANG .".php";
+		$now = new DateTime();
 		
 		self::$language = $words;
+		session_set_cookie_params(0);
 		
 		if(session_start()) {
 			if(!self::spam()) {
 				self::$action = (isset($_GET[ACTION_VAR]) ? $_GET[ACTION_VAR] : array());
 				
-				if(!self::isLoggedIn()) { // User not logged in
+				if(isset($_SESSION["username"])) {
+					$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+					$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+					$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+					
+					$stmt = $pdo->prepare("SELECT date_last_login FROM users WHERE user_id = :userid");
+					$stmt->execute(array('userid' => self::getUid($_SESSION["username"])));
+					
+					$pdo = null;
+					
+					if($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
+						$userinfo = $result;
+					} else {
+						die("Database connection error 1135");
+					}
+					
+					$last = new DateTime($_SESSION['last_accessed']);
+					$diff = $now->diff($last);
+					self::$last_activity = $diff->s;
+				} else {
+					self::$last_activity = null;
+				}
+				
+				if(self::$last_activity === null || self::$last_activity >= SESSION_LENGTH) { // logged out
 					$this->authenticated = false;
 					
 					switch(self::$action) {
@@ -70,7 +95,7 @@ class Authentication {
 							self::login();
 							break;
 					}
-				} else { // User authenticated
+				} else { // logged in
 					$this->authenticated = true;
 					
 					switch(self::$action) {
@@ -87,23 +112,6 @@ class Authentication {
 			}
 		} else {
 			$_SESSION['message'] = self::$language["sessions_req"];
-		}
-	}
-	
-	private function isLoggedIn() {
-		$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$query = "SELECT last_login FROM users WHERE id = ".self::getUid($_SESSION["username"]);
-		$result = $db->query($query);
-		$user = $result->fetch_assoc();
-		$now = new DateTime();
-		$last_login = new DateTime($user["last_login"]);
-		$result->free();
-		$db->close();
-		
-		if($last_login->diff($now)->format("s") <= MAX_SESSION_LENGTH) {
-			return true;
-		} else {
-			return false;
 		}
 	}
 	
@@ -165,7 +173,7 @@ if(!empty(self::$message)) {
 <label for="username"><?php echo self::$language["form_register_field_username"]; ?></label>
 <input type="email" name="username" id="username" required />
 </div><br /><div id="authform_pass">
-<label for="password"><?php echo self::$language["form_register_field_pw"]; ?></label>
+<label for="password"><?php echo self::$language["form_register_field_pw"] ."<br /><small>". self::$language["password_req"] ."</small>"; ?></label>
 <input type="password" name="password" id="password" required />
 <label for="repeat_password"><?php echo self::$language["form_register_field_repeat_pw"]; ?></label>
 <input type="password" name="repeat_password" id="repeat_password" required />
@@ -205,7 +213,7 @@ if(!empty(self::$message)) {
 <label for="username">Username (Email)</label>
 <p id="username"><?php echo $_SESSION['username']; ?><p>
 </div><br /><div id="authform_pass">
-<label for="password"><?php echo self::$language["form_profile_field_pw"]; ?></label>
+<label for="password"><?php echo self::$language["form_profile_field_pw"] ."<br /><small>". self::$language["password_req"] ."</small>"; ?></label>
 <input type="password" name="password" id="password" required />
 <label for="repeat_password"><?php echo self::$language["form_profile_field_pw_repeat"]; ?></label>
 <input type="password" name="repeat_password" id="repeat_password" required />
@@ -356,14 +364,14 @@ if(!empty(self::$message)) {
 
 <div id="authform_user">
 <label for="username"><?php echo self::$language["form_login_field_username"]; ?></label>
-<input type="email" name="username" id="username" required />
+<input type="email" name="username" id="username" tabindex="1" required />
 </div><!--
 --><div id="authform_pass">
 <label for="password"><?php echo self::$language["form_login_field_password"] ." <small>(<a href=\"".self::add_querystring_var(self::curPageURL(),ACTION_VAR,"lostpassword")."\">".self::$language["form_login_forgot_password"]."</a>)</small>"; ?></label>
-<input type="password" name="password" id="password" required />
+<input type="password" name="password" id="password" tabindex="2" required />
 </div><!--
 --><div id="authform_submit">
-<?php echo '<input type="submit" value="'.self::$language["form_login_submit"].'" class="auth_button" />'."\n";?>
+<?php echo '<input type="submit" value="'.self::$language["form_login_submit"].'" class="auth_button" tabindex="3" />'."\n";?>
 </div>
 
 </form>
@@ -413,7 +421,7 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 	
 	private function login() {
 		if($_SERVER['REQUEST_METHOD'] == "POST" && isset($_POST["username"]) && isset($_POST["password"])) {
-			if(self::exists("email",$_POST["username"])) {
+			if(self::exists($_POST["username"])) {
 				if(self::active($_POST["username"])) {
 					if(self::auth($_POST['username'], $_POST['password'])) {
 						// logged in
@@ -432,9 +440,13 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 	
 	private function logout() {
 		$this->authenticated = false;
-		session_unset();
+		unset($_SESSION['signed_in']);
+		unset($_SESSION['attempts']);
+		unset($_SESSION['last_attempt']);
+		unset($_SESSION['message']);
+		unset($_SESSION['username']);
+		unset($_SESSION['last_accessed']);
 		session_destroy();
-		header("Location: ".$this->remove_querystring_var($this->curPageURL(),ACTION_VAR));
 	}
 	
 	private function register() {
@@ -451,7 +463,7 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 			}
 		} else if($_SERVER['REQUEST_METHOD'] == "POST" && isset($_POST["username"]) && isset($_POST["password"]) && isset($_POST["repeat_password"])) {
 			if(self::valid("username",$_POST["username"]) && self::valid("password",$_POST["password"],$_POST["repeat_password"])) {
-				if(self::exists('email',$_POST["username"])) { // check for duplicate username
+				if(self::exists($_POST["username"])) { // check for duplicate username
 					self::$message = self::$language["status_register_fail_taken"];
 				} else { // continue registration
 					if(self::addUser()) {
@@ -489,7 +501,7 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 	private function updateProfile() {
 		if($_SERVER['REQUEST_METHOD'] == "POST" && isset($_POST["password"]) && isset($_POST["repeat_password"])) {
 			if(self::valid("username",$_SESSION['username']) && self::valid("password",$_POST["password"],$_POST["repeat_password"])) {
-				if(self::exists("email",$_SESSION['username'])) {
+				if(self::exists($_SESSION['username'])) {
 					if(self::setPassword($_SESSION['username'],$_POST["password"])) {
 						if(self::sendEmail("profile_updated",$_SESSION['username'])) {
 							// profile update successfull
@@ -505,7 +517,7 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 	private function updatePassword() {
 		if($_SERVER['REQUEST_METHOD'] == "POST" && isset($_POST["password"]) && isset($_POST["repeat_password"])) {
 			if(self::valid("password",$_POST["password"],$_POST["repeat_password"])) {
-				if(self::exists("email",self::getUsername($_GET["uid"]))) {
+				if(self::exists(self::getUsername($_GET["uid"]))) {
 					if(self::setPassword(self::getUsername($_GET['uid']),$_POST["password"])) {
 						if(self::sendEmail("password_updated",self::getUsername($_GET['uid']))) {
 							// password update successfull
@@ -526,7 +538,7 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 	private function lostPassword() {
 		if($_SERVER['REQUEST_METHOD'] == "POST" && isset($_POST["username"])) {
 			if(self::valid("username",$_POST['username'])) {
-				if(self::exists('email',$_POST['username'])) {
+				if(self::exists($_POST['username'])) {
 					$token = self::newToken($_POST["username"]);
 					if(self::sendEmail("password_reset",$_POST['username'],$token)) {
 						$_SESSION['message'] = self::$language["status_lost_sent"];
@@ -538,15 +550,20 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 		}
 	}
 	
-	// add user to database
 	private function addUser() {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$query = "INSERT INTO ". DB_TABLE ." SET email = '". self::$db->real_escape_string($_POST["username"]) ."', auth_level = 0;";
-		if(self::$db->query($query)) {
-			self::$db->close();
+		$now = new DateTime();
+		
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("INSERT INTO ". DB_TABLE ." SET email = :email, auth_level = 0, date_created = :date");
+		
+		$pdo = null;
+		
+		if($stmt->execute(array('email' => $_POST["username"], 'date' => $now->format("Y-m-d H:i:s")))) {
 			return true;
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
@@ -557,13 +574,17 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 		$hash = $hasher->HashPassword($password);
 		
 		if(strlen($hash) >= 20) {
-			self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
+			$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+			$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+			$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+			
+			$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET password = :hash WHERE email = :email");
+			
+			$pdo = null;
 
-			if(self::$db->query("UPDATE ".DB_TABLE." SET password = '".self::$db->real_escape_string($hash)."' WHERE email = '". self::$db->real_escape_string($email) ."';")) {
-				self::$db->close();
+			if($stmt->execute(array('hash' => $hash, 'email' => $email))) {
 				return $password;
 			} else {
-				self::$db->close();
 				return false;
 			}
 		} else {
@@ -625,111 +646,149 @@ Your password has been changed.
 		}
 	}
 	
-	private function exists($field,$val) {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$query = "SELECT email FROM ".DB_TABLE." WHERE email = '". self::$db->real_escape_string($val) ."'";
+	private function exists($val) {
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 		
-		if($result = self::$db->query($query)) {
-			if($result->num_rows > 0) {
-				self::$db->close();
-				return true;
-			} else {
-				return false;
-			}
+		$stmt = $pdo->prepare("SELECT email FROM ".DB_TABLE." WHERE email = :value");
+		$stmt->execute(array('value' => $val));
+		
+		$pdo = null;
+		
+		$result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+		if(!empty($result['email'])) {
+			return true;
 		} else {
-			self::$db->close();
+			return false;
 		}
 	}
 	
 	private function newToken($email) {
 		$token = uniqid();
 		
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("UPDATE ".DB_TABLE." SET token = '".self::$db->real_escape_string($token)."' WHERE email = '".self::$db->real_escape_string($email)."'");
-		if($result) {
-			self::$db->close();
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET token = :token WHERE email = :email");
+		
+		$pdo = null;
+		
+		if($stmt->execute(array('token' => $token, 'email' => $email))) {
 			return $token;
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
 	
 	private function removeToken($email) {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("UPDATE ".DB_TABLE." SET token = NULL WHERE email = '".self::$db->real_escape_string($email)."'");
-		if($result) {
-			self::$db->close();
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET token = NULL WHERE email = :email");
+		
+		$pdo = null;
+		
+		if($stmt->execute(array('email' => $email))) {
 			return true;
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
 
 	private function auth($u,$p) {
 		$hasher = new PasswordHash(HASH_COST_LOG2, HASH_PORTABLE);
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("SELECT password,active FROM ".DB_TABLE." WHERE email = '".self::$db->real_escape_string($u)."';");
-		if($row = $result->fetch_array(MYSQLI_ASSOC)) {
-			if($hasher->CheckPassword($p,$row["password"])) {
-				// logged in
-				$_SESSION['signed_in'] = "TRUE";
-				$_SESSION['username'] = $u;
+		
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("SELECT password,active,disabled FROM ".DB_TABLE." WHERE active = 1 AND disabled = 0 AND email = :email");
+		$stmt->execute(array('email' => $u));
+		
+		if($visitor = $stmt->fetch(PDO::FETCH_ASSOC)) {
+			if($hasher->CheckPassword($p,$visitor["password"])) {
+				$now = new DateTime();
 				
-				header("Location: ".$this->remove_querystring_var($this->curPageURL(),ACTION_VAR));
-				self::$db->close();
-				return true;
+				$ustmt = $pdo->prepare("UPDATE ".DB_TABLE." SET date_last_login = '".$now->format("Y-m-d H:i:s")."' WHERE email = :email");
+				$pdo = null;
+				
+				if($ustmt->execute(array('email' => $u))) {
+					// logged in
+					$_SESSION['last_accessed'] = $now->format("Y-m-d H:i:s");
+					$_SESSION['username'] = strtolower($u);
+					
+					header("Location: ".$this->remove_querystring_var($this->curPageURL(),ACTION_VAR));
+					return true;
+				} else {
+					return false;
+				}
 			} else {
-				self::$db->close();
+				$pdo = null;
 				return false;
 			}
 		} else {
-			self::$db->close();
+			$pdo = null;
 			return false;
 		}
 	}
 	
 	private function authToken($id,$token) {
 		$token = urldecode($token);
-	
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("SELECT token FROM ".DB_TABLE." WHERE user_id = '".self::$db->real_escape_string($id)."';");
-		if($row = $result->fetch_array(MYSQLI_ASSOC)) {
-			if($token == $row["token"]) {
-				// valid token
-				self::$db->close();
-				return true;
-			} else {
-				self::$db->close();
-			}
+		
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("SELECT token FROM ".DB_TABLE." WHERE user_id = :userid");
+		$stmt->execute(array('userid' => $id));
+		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
+		
+		$pdo = null;
+		
+		if($token == $visitor["token"]) {
+			// valid token
+			return true;
 		} else {
-			self::$db->close();
+			return false;
 		}
 	}
 	
 	private function activate($id) {
 		$id = urldecode($id);
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("UPDATE ".DB_TABLE." SET active = 1 WHERE user_id = '".self::$db->real_escape_string($id)."'");
-		if($result) {
-			self::$db->close();
+		
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET active = 1 WHERE user_id = :userid");
+		
+		$pdo = null;
+		
+		if($stmt->execute(array('userid' => $id))) {
 			return true;
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
 	
 	private function active($email) {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("SELECT active FROM ".DB_TABLE." WHERE email = '".self::$db->real_escape_string($email)."'");
-		$row = $result->fetch_array(MYSQLI_ASSOC);
-		if($row["active"] == 1) {
-			self::$db->close();
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("SELECT active FROM ".DB_TABLE." WHERE email = :email");
+		$stmt->execute(array('email' => $email));
+		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
+		
+		$pdo = null;
+		
+		if($visitor["active"] == 1) {
 			return true;
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
@@ -748,11 +807,9 @@ Your password has been changed.
 				if($d1 !== $d2) {
 					$valid = false;
 					self::$message = "Passwords do not match.";
-				} else {
-					if(!preg_match(PASSWORD_REGEX,$d1)) {
-						$valid = false;
-						self::$message = self::$language["password_req"];
-					}
+				} else if(!preg_match(PASSWORD_REGEX,$d1)) {
+					$valid = false;
+					self::$message = self::$language["password_req"];
 				}
 				break;
 		}
@@ -761,40 +818,55 @@ Your password has been changed.
 	}
 	
 	private function getAccessLevel($email) {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("SELECT auth_level FROM ".DB_TABLE." WHERE email = '".self::$db->real_escape_string($email)."'");
-		$row = $result->fetch_array(MYSQLI_ASSOC);
-		if(!empty($row)) {
-			self::$db->close();
-			return (int) $row["auth_level"];
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("SELECT auth_level FROM ".DB_TABLE." WHERE email = :email");
+		$stmt->execute(array('email' => $email));
+		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
+		
+		$pdo = null;
+		
+		if(!empty($visitor)) {
+			return (int) $visitor["auth_level"];
 		} else {
-			self::$db->close();
 			return 0;
 		}
 	}
 	
-	private function getUid($email) {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("SELECT user_id FROM ".DB_TABLE." WHERE email = '".self::$db->real_escape_string($email)."'");
-		$row = $result->fetch_array(MYSQLI_ASSOC);
-		if(!empty($row)) {
-			self::$db->close();
-			return $row["user_id"];
+	public function getUid($email) {
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("SELECT user_id FROM ".DB_TABLE." WHERE email = :email");
+		$stmt->execute(array('email' => $email));
+		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
+		
+		$pdo = null;
+		
+		if(!empty($visitor)) {
+			return $visitor["user_id"];
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
 	
-	private function getUsername($uid) {
-		self::$db = new mysqli(DB_HOST,DB_USER,DB_PASS,DB_NAME);
-		$result = self::$db->query("SELECT email FROM ".DB_TABLE." WHERE user_id = '".self::$db->real_escape_string($uid)."'");
-		$row = $result->fetch_array(MYSQLI_ASSOC);
-		if(!empty($row)) {
-			self::$db->close();
-			return $row["email"];
+	public function getUsername($uid) {
+		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		$stmt = $pdo->prepare("SELECT email FROM ".DB_TABLE." WHERE user_id = :userid");
+		$stmt->execute(array('userid' => $uid));
+		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
+		
+		$pdo = null;
+		
+		if(!empty($visitor)) {
+			return $visitor["email"];
 		} else {
-			self::$db->close();
 			return false;
 		}
 	}
@@ -831,7 +903,7 @@ Your password has been changed.
 	}
 	
 	public function logoutLink() {
-		return "<a href=\"?".ACTION_VAR."=logout\">logout</a>";
+		return "<a href=\"?".ACTION_VAR."=logout\">Sign out</a>";
 	}
 	
 	public function updateProfileLink() {
