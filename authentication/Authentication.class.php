@@ -33,6 +33,7 @@ if($auth->authenticated) {
 class Authentication {
 	public $authenticated = false;		// logged in?
 	
+	protected $pdo;
 	private static $language;
 	private static $action;
 	private static $message;
@@ -45,6 +46,15 @@ class Authentication {
 		require_once "translations/". SITE_LANG .".php";
 		$now = new DateTime();
 		
+		try {
+			$this->pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
+		} catch (PDOException $e) {
+			echo 'Could not connect to database.';
+			die();
+		}
+		$this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		$this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
+		
 		self::$language = $words;
 		session_set_cookie_params(0);
 		
@@ -53,14 +63,8 @@ class Authentication {
 				self::$action = (isset($_GET[ACTION_VAR]) ? $_GET[ACTION_VAR] : array());
 				
 				if(isset($_SESSION["username"])) {
-					$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-					$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-					$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-					
-					$stmt = $pdo->prepare("SELECT date_last_login FROM users WHERE user_id = :userid");
+					$stmt = $this->pdo->prepare("SELECT date_last_login FROM users WHERE user_id = :userid");
 					$stmt->execute(array('userid' => self::getUid($_SESSION["username"])));
-					
-					$pdo = null;
 					
 					if($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
 						$userinfo = $result;
@@ -553,13 +557,7 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 	private function addUser() {
 		$now = new DateTime();
 		
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("INSERT INTO ". DB_TABLE ." SET email = :email, auth_level = 0, date_created = :date");
-		
-		$pdo = null;
+		$stmt = $this->pdo->prepare("INSERT INTO ". DB_TABLE ." SET email = :email, auth_level = 0, date_created = :date");
 		
 		if($stmt->execute(array('email' => $_POST["username"], 'date' => $now->format("Y-m-d H:i:s")))) {
 			return true;
@@ -574,13 +572,8 @@ echo "<a href=\"?".ACTION_VAR."=register\" class=\"auth_button\">".self::$langua
 		$hash = $hasher->HashPassword($password);
 		
 		if(strlen($hash) >= 20) {
-			$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-			$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-			$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 			
-			$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET password = :hash WHERE email = :email");
-			
-			$pdo = null;
+			$stmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET password = :hash WHERE email = :email");
 
 			if($stmt->execute(array('hash' => $hash, 'email' => $email))) {
 				return $password;
@@ -647,14 +640,8 @@ Your password has been changed.
 	}
 	
 	private function exists($val) {
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT email FROM ".DB_TABLE." WHERE email = :value");
+		$stmt = $this->pdo->prepare("SELECT email FROM ".DB_TABLE." WHERE email = :value");
 		$stmt->execute(array('value' => $val));
-		
-		$pdo = null;
 		
 		$result = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -668,13 +655,7 @@ Your password has been changed.
 	private function newToken($email) {
 		$token = uniqid();
 		
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET token = :token WHERE email = :email");
-		
-		$pdo = null;
+		$stmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET token = :token WHERE email = :email");
 		
 		if($stmt->execute(array('token' => $token, 'email' => $email))) {
 			return $token;
@@ -684,13 +665,7 @@ Your password has been changed.
 	}
 	
 	private function removeToken($email) {
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET token = NULL WHERE email = :email");
-		
-		$pdo = null;
+		$stmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET token = NULL WHERE email = :email");
 		
 		if($stmt->execute(array('email' => $email))) {
 			return true;
@@ -702,19 +677,14 @@ Your password has been changed.
 	private function auth($u,$p) {
 		$hasher = new PasswordHash(HASH_COST_LOG2, HASH_PORTABLE);
 		
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT password,active,disabled FROM ".DB_TABLE." WHERE active = 1 AND disabled = 0 AND email = :email");
+		$stmt = $this->pdo->prepare("SELECT password,active,disabled FROM ".DB_TABLE." WHERE active = 1 AND disabled = 0 AND email = :email");
 		$stmt->execute(array('email' => $u));
 		
 		if($visitor = $stmt->fetch(PDO::FETCH_ASSOC)) {
 			if($hasher->CheckPassword($p,$visitor["password"])) {
 				$now = new DateTime();
 				
-				$ustmt = $pdo->prepare("UPDATE ".DB_TABLE." SET date_last_login = '".$now->format("Y-m-d H:i:s")."' WHERE email = :email");
-				$pdo = null;
+				$ustmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET date_last_login = '".$now->format("Y-m-d H:i:s")."' WHERE email = :email");
 				
 				if($ustmt->execute(array('email' => $u))) {
 					// logged in
@@ -727,11 +697,9 @@ Your password has been changed.
 					return false;
 				}
 			} else {
-				$pdo = null;
 				return false;
 			}
 		} else {
-			$pdo = null;
 			return false;
 		}
 	}
@@ -739,15 +707,9 @@ Your password has been changed.
 	private function authToken($id,$token) {
 		$token = urldecode($token);
 		
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT token FROM ".DB_TABLE." WHERE user_id = :userid");
+		$stmt = $this->pdo->prepare("SELECT token FROM ".DB_TABLE." WHERE user_id = :userid");
 		$stmt->execute(array('userid' => $id));
 		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
-		
-		$pdo = null;
 		
 		if($token == $visitor["token"]) {
 			// valid token
@@ -760,13 +722,7 @@ Your password has been changed.
 	private function activate($id) {
 		$id = urldecode($id);
 		
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("UPDATE ".DB_TABLE." SET active = 1 WHERE user_id = :userid");
-		
-		$pdo = null;
+		$stmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET active = 1 WHERE user_id = :userid");
 		
 		if($stmt->execute(array('userid' => $id))) {
 			return true;
@@ -776,15 +732,9 @@ Your password has been changed.
 	}
 	
 	private function active($email) {
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT active FROM ".DB_TABLE." WHERE email = :email");
+		$stmt = $this->pdo->prepare("SELECT active FROM ".DB_TABLE." WHERE email = :email");
 		$stmt->execute(array('email' => $email));
 		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
-		
-		$pdo = null;
 		
 		if($visitor["active"] == 1) {
 			return true;
@@ -817,16 +767,10 @@ Your password has been changed.
 		return $valid;
 	}
 	
-	private function getAccessLevel($email) {
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT auth_level FROM ".DB_TABLE." WHERE email = :email");
+	private function getAccessLevel($email) {		
+		$stmt = $this->pdo->prepare("SELECT auth_level FROM ".DB_TABLE." WHERE email = :email");
 		$stmt->execute(array('email' => $email));
 		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
-		
-		$pdo = null;
 		
 		if(!empty($visitor)) {
 			return (int) $visitor["auth_level"];
@@ -835,16 +779,10 @@ Your password has been changed.
 		}
 	}
 	
-	public function getUid($email) {
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT user_id FROM ".DB_TABLE." WHERE email = :email");
+	public function getUid($email) {		
+		$stmt = $this->pdo->prepare("SELECT user_id FROM ".DB_TABLE." WHERE email = :email");
 		$stmt->execute(array('email' => $email));
 		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
-		
-		$pdo = null;
 		
 		if(!empty($visitor)) {
 			return $visitor["user_id"];
@@ -854,15 +792,9 @@ Your password has been changed.
 	}
 	
 	public function getUsername($uid) {
-		$pdo = new PDO('mysql:dbname='.DB_NAME.';host='.DB_HOST.';charset=utf8', DB_USER, DB_PASS);
-		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
-		$stmt = $pdo->prepare("SELECT email FROM ".DB_TABLE." WHERE user_id = :userid");
+		$stmt = $this->pdo->prepare("SELECT email FROM ".DB_TABLE." WHERE user_id = :userid");
 		$stmt->execute(array('userid' => $uid));
 		$visitor = $stmt->fetch(PDO::FETCH_ASSOC);
-		
-		$pdo = null;
 		
 		if(!empty($visitor)) {
 			return $visitor["email"];
