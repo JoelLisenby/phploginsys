@@ -20,7 +20,6 @@ class Template {
 	private static $title;
 	private static $meta;
 	private static $content;
-	private static $action_var;
 
 	public function __construct($title,$content,$meta = null) {
 		self::$title = $title;
