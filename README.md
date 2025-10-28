@@ -1,6 +1,6 @@
 This file is part of phploginsys.
 
-Copyright 2012 Joel Lisenby
+Copyright 2012-2025 Joel Lisenby
 
 phploginsys is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,8 +20,9 @@ phploginsys
 
 A simple PHP user account login and registration system.
 
-Utilizes the public domain phpass password hashing framework for secure password hashing.
+Utilizes a fork of the public domain phpass password hashing framework for secure password hashing.
 phpass - http://www.openwall.com/phpass/
+phpass fork - https://gist.github.com/JoelLisenby/ee8cedeaf282c260bd459e15b5059e98
 
 See [`index.php`](https://github.com/JoelLisenby/phploginsys/blob/master/index.php) for usage example:
 

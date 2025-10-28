@@ -2,6 +2,10 @@
 /*
 This file is part of phploginsys.
 
+Copyright 2012-2025 Joel Lisenby
+
+https://github.com/JoelLisenby/phploginsys
+
 phploginsys is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -63,7 +67,7 @@ class Authentication {
 				self::$action = (isset($_GET[ACTION_VAR]) ? $_GET[ACTION_VAR] : array());
 				
 				if(isset($_SESSION["username"])) {
-					$stmt = $this->pdo->prepare("SELECT date_last_login FROM users WHERE user_id = :userid");
+					$stmt = $this->pdo->prepare("SELECT date_last_login FROM ".DB_TABLE." WHERE user_id = :userid");
 					$stmt->execute(array('userid' => self::getUid($_SESSION["username"])));
 					
 					if($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -684,9 +688,8 @@ Your password has been changed.
 			if($hasher->CheckPassword($p,$visitor["password"])) {
 				$now = new DateTime();
 				
-				$ustmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET date_last_login = '".$now->format("Y-m-d H:i:s")."' WHERE email = :email");
-				
-				if($ustmt->execute(array('email' => $u))) {
+				$ustmt = $this->pdo->prepare("UPDATE ".DB_TABLE." SET date_last_login = :date_last_login WHERE email = :email");
+				if($ustmt->execute(array('date_last_login' => $now->format("Y-m-d H:i:s"), 'email' => $u))) {
 					// logged in
 					$_SESSION['last_accessed'] = $now->format("Y-m-d H:i:s");
 					$_SESSION['username'] = strtolower($u);
@@ -750,7 +753,7 @@ Your password has been changed.
 			case "username":
 				if(!preg_match(USERNAME_REGEX,$d1)) {
 						$valid = false;
-						self::$message = self::$langauge["username_req"];
+						self::$message = self::$language["username_req"];
 				}
 				break;
 			case "password":
